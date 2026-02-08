@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Advanced Expense Tracker</title>
+<link rel="stylesheet" href="style/style.css">
+<style>
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background: var(--bg);
+    color: var(--text);
+    transition: .3s;
+}
+:root {
+    --bg: #f2f2f2;
+    --text: #000;
+    --card: #fff;
+}
+.dark {
+    --bg: #1a1a1a;
+    --text: #fff;
+    --card: #222;
+}
+.container {
+    max-width: 900px;
+    margin: auto;
+}
+.card {
+    background: var(--card);
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+input, select, button {
+    padding: 10px;
+    width: 100%;
+    margin-top: 8px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+}
+button {
+    background: #007bff;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+}
+button:hover { background: #005fcc; }
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+th, td {
+    padding: 12px;
+    border-bottom: 1px solid #ccc;
+}
+.summary-box {
+    background: var(--card);
+    padding: 15px;
+    border-radius: 10px;
+}
+.mode-btn {
+    background: black; 
+    color: white; 
+    padding: 7px 15px; 
+    border-radius: 8px; 
+    cursor: pointer;
+}
+.delete-btn {
+    background: red;
+    color: white;
+    padding: 6px;
+    border-radius: 5px;
+}
+.edit-btn {
+    background: orange;
+    color: white;
+    padding: 6px;
+    border-radius: 5px;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<button class="mode-btn" onclick="toggleMode()">Toggle Dark/Light</button>
+
+<h2>Advanced Expense Tracker</h2>
+
+<div class="card">
+    <label>Item Name:</label>
+    <input type="text" id="item">
+
+    <label>Amount (₹):</label>
+    <input type="number" id="amount">
+
+    <label>Select Category:</label>
+    <select id="category"></select>
+
+    <label>Date:</label>
+    <input type="date" id="date">
+
+    <button onclick="addExpense()">Add Expense</button>
+</div>
+
+<div class="card">
+    <h3>Filters</h3>
+    <label>Search:</label>
+    <input type="text" id="search" onkeyup="renderTable()">
+
+    <label>Filter Category:</label>
+    <select id="filterCategory" onchange="renderTable()"></select>
+
+    <label>Date From:</label>
+    <input type="date" id="from" onchange="renderTable()">
+
+    <label>Date To:</label>
+    <input type="date" id="to" onchange="renderTable()">
+
+    <button onclick="exportCSV()">Export CSV</button>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Item</th>
+            <th>Amount (₹)</th>
+            <th>Category</th>
+            <th>Date</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+</table>
+
+<div class="summary-box">
+    <h3>Summary</h3>
+    <p>Total: ₹<span id="total"></span></p>
+    <p>Weekly: ₹<span id="weekly"></span></p>
+    <p>Monthly: ₹<span id="monthly"></span></p>
+
+    <h4>Category Totals:</h4>
+    <ul id="categoryTotals"></ul>
+</div>
+
+<div class="card">
+    <h3>Charts</h3>
+    <canvas id="pieChart" height="200"></canvas>
+    <canvas id="barChart" height="200"></canvas>
+</div>
+
+</div>
+
+<script>
+let expenses = JSON.parse(localStorage.getItem("expenses") || "[]");
+let categories = JSON.parse(localStorage.getItem("categories") || 
+    '["Food","Travel","Shopping","Bills","Entertainment","Other"]');
+
+loadCategories();
+renderTable();
+updateSummary();
+loadCharts();
+
+function save() {
+    localStorage.setItem("expenses", JSON.stringify(expenses));
+}
+
+function loadCategories() {
+    let c = document.getElementById("category");
+    let f = document.getElementById("filterCategory");
+
+    c.innerHTML = "";
+    f.innerHTML = `<option value="">All</option>`;
+
+    categories.forEach(cat => {
+        c.innerHTML += `<option>${cat}</option>`;
+        f.innerHTML += `<option>${cat}</option>`;
+    });
+}
+
+function addExpense() {
+    let item = document.getElementById("item").value;
+    let amount = document.getElementById("amount").value;
+    let category = document.getElementById("category").value;
+    let date = document.getElementById("date").value;
+
+    if (item === "" || amount === "" || date === "") {
+        alert("Please fill all fields");
+        return;
+    }
+
+    expenses.push({ item, amount: Number(amount), category, date });
+
+    save();
+    renderTable();
+    updateSummary();
+    loadCharts();
+
+    document.getElementById("item").value = "";
+    document.getElementById("amount").value = "";
+}
+
+function deleteExpense(i) {
+    expenses.splice(i, 1);
+    save();
+    renderTable();
+    updateSummary();
+    loadCharts();
+}
+
+function editExpense(i) {
+    let e = expenses[i];
+    let newItem = prompt("Edit Item:", e.item);
+    let newAmt = prompt("Edit Amount:", e.amount);
+    let newCat = prompt("Edit Category:", e.category);
+    let newDate = prompt("Edit Date (YYYY-MM-DD):", e.date);
+
+    expenses[i] = {
+        item: newItem,
+        amount: Number(newAmt),
+        category: newCat,
+        date: newDate
+    };
+
+    save();
+    renderTable();
+    updateSummary();
+    loadCharts();
+}
+
+function renderTable() {
+    const tb = document.getElementById("tableBody");
+    tb.innerHTML = "";
+
+    let search = document.getElementById("search").value.toLowerCase();
+    let fCat = document.getElementById("filterCategory").value;
+    let from = document.getElementById("from").value;
+    let to = document.getElementById("to").value;
+
+    let filtered = expenses.filter(e =>
+        e.item.toLowerCase().includes(search) &&
+        (fCat === "" || e.category === fCat) &&
+        (from === "" || e.date >= from) &&
+        (to === "" || e.date <= to)
+    );
+
+    filtered.forEach((e, i) => {
+        tb.innerHTML += `
+        <tr>
+            <td>${e.item}</td>
+            <td>₹${e.amount}</td>
+            <td>${e.category}</td>
+            <td>${e.date}</td>
+            <td>
+                <button class="edit-btn" onclick="editExpense(${i})">Edit</button>
+                <button class="delete-btn" onclick="deleteExpense(${i})">Delete</button>
+            </td>
+        </tr>`;
+    });
+}
+
+function updateSummary() {
+    let total = 0, weekly = 0, monthly = 0;
+    let now = new Date();
+
+    let catTotals = {};
+
+    expenses.forEach(e => {
+        total += e.amount;
+
+        let diff = (now - new Date(e.date)) / (1000*60*60*24);
+        if (diff <= 7) weekly += e.amount;
+        if (diff <= 30) monthly += e.amount;
+
+        catTotals[e.category] = (catTotals[e.category] || 0) + e.amount;
+    });
+
+    document.getElementById("total").innerText = total;
+    document.getElementById("weekly").innerText = weekly;
+    document.getElementById("monthly").innerText = monthly;
+
+    let ul = document.getElementById("categoryTotals");
+    ul.innerHTML = "";
+    for (let c in catTotals) {
+        ul.innerHTML += `<li>${c}: ₹${catTotals[c]}</li>`;
+    }
+}
+
+function exportCSV() {
+    let csv = "Item,Amount,Category,Date\n";
+    expenses.forEach(e => {
+        csv += `${e.item},${e.amount},${e.category},${e.date}\n`;
+    });
+
+    let blob = new Blob([csv], { type: "text/csv" });
+    let url = URL.createObjectURL(blob);
+
+    let a = document.createElement("a");
+    a.href = url;
+    a.download = "expenses.csv";
+    a.click();
+}
+
+function toggleMode() {
+    document.body.classList.toggle("dark");
+    localStorage.setItem("mode", document.body.classList.contains("dark"));
+}
+
+if (localStorage.getItem("mode") === "true") {
+    document.body.classList.add("dark");
+}
+
+function loadCharts() {
+    if (window.pie) window.pie.destroy();
+    if (window.bar) window.bar.destroy();
+
+    let catTotals = {};
+    expenses.forEach(e => {
+        catTotals[e.category] = (catTotals[e.category] || 0) + e.amount;
+    });
+
+    let ctx1 = document.getElementById("pieChart").getContext("2d");
+    let ctx2 = document.getElementById("barChart").getContext("2d");
+
+    window.pie = new Chart(ctx1, {
+        type: "pie",
+        data: {
+            labels: Object.keys(catTotals),
+            datasets: [{
+                data: Object.values(catTotals)
+            }]
+        }
+    });
+
+    window.bar = new Chart(ctx2, {
+        type: "bar",
+        data: {
+            labels: Object.keys(catTotals),
+            datasets: [{
+                data: Object.values(catTotals)
+            }]
+        }
+    });
+}
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+</body>
+</html>
